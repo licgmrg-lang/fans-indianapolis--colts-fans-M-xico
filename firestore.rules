@@ -29,7 +29,19 @@ service cloud.firestore {
         && request.resource.data.email == request.auth.token.email
         && request.resource.data.role == 'member'
       );
-      allow update: if isAdmin() || (
+      allow update: if (
+        isOwner()
+        && request.resource.data.email == resource.data.email
+        && (
+          resource.data.email != 'lic.gmrg@gmail.com'
+          || request.resource.data.role == 'primary_owner'
+        )
+      ) || (
+        isAdmin()
+        && resource.data.email != 'lic.gmrg@gmail.com'
+        && request.resource.data.email == resource.data.email
+        && request.resource.data.role == resource.data.role
+      ) || (
         signedIn()
         && request.auth.uid == uid
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
@@ -76,7 +88,10 @@ service cloud.firestore {
 
     match /predictions/{predictionId} {
       allow read: if signedIn();
-      allow create, update: if signedIn() && request.resource.data.memberId == request.auth.uid;
+      allow create: if signedIn() && request.resource.data.memberId == request.auth.uid;
+      allow update: if signedIn()
+        && resource.data.memberId == request.auth.uid
+        && request.resource.data.memberId == request.auth.uid;
       allow delete: if signedIn() && resource.data.memberId == request.auth.uid;
     }
 
