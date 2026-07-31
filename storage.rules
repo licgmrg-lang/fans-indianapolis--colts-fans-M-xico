@@ -1,0 +1,42 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner() {
+      return signedIn() && request.auth.token.email == 'lic.gmrg@gmail.com';
+    }
+
+    function isAdmin() {
+      return isOwner() || (
+        signedIn() &&
+        firestore.exists(/databases/(default)/documents/members/$(request.auth.uid)) &&
+        firestore.get(/databases/(default)/documents/members/$(request.auth.uid)).data.role in ['admin', 'primary_owner']
+      );
+    }
+
+    function validImage() {
+      return request.resource.size < 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+
+    match /avatars/{uid}/{fileName} {
+      allow read: if signedIn();
+      allow write: if validImage() && (request.auth.uid == uid || isAdmin());
+    }
+
+    match /feed/{uid}/{fileName} {
+      allow read: if signedIn();
+      allow write: if validImage() && request.auth.uid == uid;
+      allow delete: if request.auth.uid == uid || isAdmin();
+    }
+
+    match /history/{fileName} {
+      allow read: if signedIn();
+      allow write: if validImage() && isAdmin();
+    }
+  }
+}

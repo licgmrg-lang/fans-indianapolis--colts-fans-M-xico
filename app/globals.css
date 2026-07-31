@@ -1973,6 +1973,60 @@ label {
   font-size: 0.64rem;
 }
 
+.infrastructure-status {
+  padding: 1rem 1.15rem;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 0.75rem;
+  border: 1px solid #d6e1ec;
+  border-radius: 14px;
+  background: #f8fbfe;
+}
+
+.infrastructure-status > span {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+  background: #e6eff8;
+  color: var(--colts);
+}
+
+.infrastructure-status div {
+  display: grid;
+}
+
+.infrastructure-status strong {
+  font-size: 0.8rem;
+}
+
+.infrastructure-status small {
+  margin-top: 0.18rem;
+  color: var(--muted);
+  font-size: 0.65rem;
+}
+
+.infrastructure-status > b {
+  padding: 0.4rem 0.58rem;
+  border-radius: 999px;
+  background: #fff3d8;
+  color: #876006;
+  font-size: 0.58rem;
+  letter-spacing: 0.08em;
+}
+
+.infrastructure-connected {
+  border-color: #c8e2d5;
+  background: #f6fcf8;
+}
+
+.infrastructure-connected > b {
+  background: #e6f5ed;
+  color: var(--success);
+}
+
 .member-table {
   margin-top: 1rem;
   display: grid;
@@ -2079,6 +2133,7 @@ label {
   display: grid;
 }
 
+.backup-zone,
 .danger-zone {
   padding: 1rem 1.2rem;
   display: flex;
@@ -2090,27 +2145,113 @@ label {
   background: #fffafa;
 }
 
+.backup-zone {
+  border-color: #cbdceb;
+  background: #f7fbff;
+}
+
+.backup-zone > div,
 .danger-zone > div {
   display: flex;
   align-items: center;
   gap: 0.7rem;
 }
 
+.backup-zone > div:first-child {
+  color: var(--colts);
+}
+
 .danger-zone > div:first-child {
   color: var(--danger);
 }
 
+.backup-zone span,
 .danger-zone span {
   display: grid;
 }
 
+.backup-zone strong,
 .danger-zone strong {
   font-size: 0.78rem;
 }
 
+.backup-zone small,
 .danger-zone small {
   color: #7e6970;
   font-size: 0.64rem;
+}
+
+.backup-zone small {
+  color: #62758b;
+}
+
+.network-banner {
+  position: fixed;
+  z-index: 80;
+  left: 50%;
+  bottom: 1rem;
+  padding: 0.7rem 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  border: 1px solid #e0b44c;
+  border-radius: 999px;
+  background: #fff6db;
+  color: #745006;
+  box-shadow: var(--shadow);
+  font-size: 0.72rem;
+  font-weight: 750;
+  transform: translateX(-50%);
+}
+
+.install-banner {
+  position: fixed;
+  z-index: 75;
+  right: 1.2rem;
+  bottom: 1.2rem;
+  max-width: min(440px, calc(100vw - 2rem));
+  padding: 0.75rem;
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  align-items: center;
+  gap: 0.65rem;
+  border: 1px solid rgba(255, 255, 255, 0.17);
+  border-radius: 14px;
+  background: var(--colts-deep);
+  color: #fff;
+  box-shadow: 0 18px 44px rgba(0, 28, 61, 0.26);
+}
+
+.install-banner-icon {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.install-banner > span:nth-child(2) {
+  display: grid;
+}
+
+.install-banner strong {
+  font-size: 0.76rem;
+}
+
+.install-banner small {
+  color: #bcd0e4;
+  font-size: 0.62rem;
+}
+
+.install-dismiss {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: #b9cde0;
 }
 
 .bottom-nav {
@@ -2463,6 +2604,15 @@ label {
     grid-template-columns: auto minmax(0, 1fr) auto;
   }
 
+  .infrastructure-status {
+    grid-template-columns: auto 1fr;
+  }
+
+  .infrastructure-status > b {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+
   .member-table select,
   .locked-role {
     grid-column: 2 / -1;
@@ -2472,6 +2622,37 @@ label {
   .danger-zone {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .backup-zone {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .backup-zone > div:last-child {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .install-banner {
+    right: 1rem;
+    bottom: 5.2rem;
+    grid-template-columns: auto 1fr auto;
+  }
+
+  .install-banner .button {
+    grid-column: 1 / -1;
+  }
+
+  .install-dismiss {
+    grid-column: 3;
+    grid-row: 1;
+  }
+
+  .network-banner {
+    bottom: 5.2rem;
+    width: max-content;
+    max-width: calc(100vw - 2rem);
   }
 
   .danger-zone > div:last-child {

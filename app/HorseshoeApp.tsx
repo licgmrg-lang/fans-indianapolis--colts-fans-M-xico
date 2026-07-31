@@ -14,11 +14,14 @@ import {
   ChevronRight,
   Clock3,
   Crown,
+  Database,
+  Download,
   Heart,
   History,
   Home,
   IdCard,
   ImagePlus,
+  FileUp,
   Link as LinkIcon,
   LockKeyhole,
   LogOut,
@@ -41,6 +44,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { CLEAN_DATA, LocalStore, makeId, OWNER_EMAIL, type SessionUser } from "./store";
+import { firebaseConfigured } from "./firebase/config";
 import {
   CITIES,
   type AppData,
@@ -1659,7 +1663,32 @@ function AdminModule({
   notify: (message: string, tone?: ToastTone) => void;
 }) {
   const [confirmReset, setConfirmReset] = useState(false);
+  const restoreRef = useRef<HTMLInputElement>(null);
   const pending = data.feedPosts.filter((post) => post.status === "pending").length;
+
+  const downloadBackup = () => {
+    const contents = LocalStore.exportData(data);
+    const url = URL.createObjectURL(new Blob([contents], { type: "application/json" }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `project-horseshoe-respaldo-${new Date().toISOString().slice(0, 10)}.json`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+    notify("Respaldo descargado.");
+  };
+
+  const restoreBackup = async (file?: File) => {
+    if (!file) return;
+    try {
+      const restored = LocalStore.restore(await file.text());
+      setData(restored);
+      notify("Respaldo restaurado correctamente.");
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "No fue posible restaurar el respaldo.", "danger");
+    } finally {
+      if (restoreRef.current) restoreRef.current.value = "";
+    }
+  };
 
   const changeRole = (member: Member, role: Role) => {
     if (!isOwnerIdentity || member.email === OWNER_EMAIL) return;
@@ -1719,6 +1748,21 @@ function AdminModule({
         </article>
       </div>
 
+      <section className={`infrastructure-status ${firebaseConfigured ? "infrastructure-connected" : ""}`}>
+        <span>
+          <Database size={20} />
+        </span>
+        <div>
+          <strong>{firebaseConfigured ? "Firebase configurado" : "Modo local protegido"}</strong>
+          <small>
+            {firebaseConfigured
+              ? "La configuración está disponible para activar la sincronización en la siguiente migración."
+              : "La PWA funciona sin conexión; las reglas y variables de Firebase ya están preparadas para conectarse."}
+          </small>
+        </div>
+        <b>{firebaseConfigured ? "LISTO" : "PENDIENTE DE CONEXIÓN"}</b>
+      </section>
+
       <div className="admin-layout">
         <section className="surface member-admin">
           <div className="surface-heading">
@@ -1775,6 +1819,33 @@ function AdminModule({
           )}
         </section>
       </div>
+
+      {isOwnerIdentity && (
+        <section className="backup-zone">
+          <div>
+            <Download size={20} />
+            <span>
+              <strong>Respaldo portátil</strong>
+              <small>Descarga o restaura todos los datos mientras completamos la migración a Firebase.</small>
+            </span>
+          </div>
+          <div>
+            <button className="button button-secondary" onClick={downloadBackup}>
+              <Download size={16} /> Descargar respaldo
+            </button>
+            <button className="button button-ghost" onClick={() => restoreRef.current?.click()}>
+              <FileUp size={16} /> Restaurar
+            </button>
+            <input
+              ref={restoreRef}
+              hidden
+              type="file"
+              accept="application/json,.json"
+              onChange={(event) => restoreBackup(event.target.files?.[0])}
+            />
+          </div>
+        </section>
+      )}
 
       {isOwnerIdentity && (
         <section className="danger-zone">

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
+import PwaRuntime from "./PwaRuntime";
 import "./globals.css";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -39,7 +40,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="es">
-      <body>{children}</body>
+      <body>
+        {children}
+        <PwaRuntime />
+      </body>
     </html>
   );
 }

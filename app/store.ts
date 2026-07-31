@@ -75,6 +75,44 @@ export const LocalStore = {
       .forEach((key) => window.localStorage.removeItem(key));
     this.save(CLEAN_DATA);
   },
+  exportData(data: AppData) {
+    return JSON.stringify(
+      {
+        schemaVersion: 1,
+        exportedAt: new Date().toISOString(),
+        data,
+      },
+      null,
+      2,
+    );
+  },
+  restore(raw: string): AppData {
+    const parsed = JSON.parse(raw) as { schemaVersion?: number; data?: Partial<AppData> };
+    const candidate = parsed.data;
+    const collectionKeys: (keyof AppData)[] = [
+      "members",
+      "events",
+      "attendances",
+      "feedPosts",
+      "predictions",
+      "guestBook",
+      "raffles",
+      "auditLogs",
+      "travels",
+    ];
+
+    if (parsed.schemaVersion !== 1 || !candidate || collectionKeys.some((key) => !Array.isArray(candidate[key]))) {
+      throw new Error("El archivo no corresponde a un respaldo válido de Project Horseshoe.");
+    }
+
+    const members = (candidate.members as Member[]).filter((member) => member.email !== OWNER_EMAIL);
+    const restored: AppData = {
+      ...(candidate as AppData),
+      members: [OWNER, ...members],
+    };
+    this.save(restored);
+    return restored;
+  },
 };
 
 export function makeId(prefix: string) {
