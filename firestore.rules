@@ -23,10 +23,12 @@ service cloud.firestore {
 
     match /members/{uid} {
       allow read: if signedIn();
-      allow create: if signedIn()
+      allow create: if isOwner() || (
+        signedIn()
         && request.auth.uid == uid
         && request.resource.data.email == request.auth.token.email
-        && request.resource.data.role == 'member';
+        && request.resource.data.role == 'member'
+      );
       allow update: if isAdmin() || (
         signedIn()
         && request.auth.uid == uid

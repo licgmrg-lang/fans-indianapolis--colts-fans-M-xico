@@ -46,6 +46,18 @@ import {
 import { CLEAN_DATA, LocalStore, makeId, OWNER_EMAIL, type SessionUser } from "./store";
 import { firebaseConfigured } from "./firebase/config";
 import {
+  ensureFirebaseMember,
+  persistFirebaseDiff,
+  registerWithEmail,
+  signInWithEmail,
+  signInWithGoogle,
+  signOutFirebase,
+  subscribeToFirebaseData,
+  watchFirebaseAuth,
+  type FirebaseUserProfile,
+  type FirebaseRegistrationProfile,
+} from "./firebase/client";
+import {
   CITIES,
   type AppData,
   type CommunityEvent,
@@ -158,9 +170,23 @@ function SectionTitle({
 function LoginScreen({
   data,
   onEnter,
+  onGoogleSignIn,
+  onFirebaseCredentials,
+  googleAvailable,
+  firebaseBusy,
+  firebaseError,
 }: {
   data: AppData;
   onEnter: (member: Member, updated?: AppData) => void;
+  onGoogleSignIn: () => void;
+  onFirebaseCredentials: (
+    email: string,
+    password: string,
+    profile?: FirebaseRegistrationProfile,
+  ) => void;
+  googleAvailable: boolean;
+  firebaseBusy: boolean;
+  firebaseError: string;
 }) {
   const [registering, setRegistering] = useState(false);
   const [email, setEmail] = useState(OWNER_EMAIL);
@@ -168,6 +194,7 @@ function LoginScreen({
   const [cityId, setCityId] = useState("cdmx");
   const [photo, setPhoto] = useState("");
   const [photoUrl, setPhotoUrl] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -187,6 +214,23 @@ function LoginScreen({
     event.preventDefault();
     const normalized = email.trim().toLowerCase();
     if (!normalized.includes("@")) return setError("Escribe un correo válido.");
+    if (firebaseConfigured) {
+      if (password.length < 6) return setError("La contraseña debe tener al menos 6 caracteres.");
+      if (registering && !fullName.trim()) return setError("Escribe tu nombre completo.");
+      onFirebaseCredentials(
+        normalized,
+        password,
+        registering
+          ? {
+              fullName: fullName.trim(),
+              avatarUrl: photo || photoUrl.trim(),
+              cityId,
+              state: CITIES.find((city) => city.id === cityId)?.name ?? "México",
+            }
+          : undefined,
+      );
+      return;
+    }
     const existing = data.members.find((member) => member.email.toLowerCase() === normalized);
     if (!registering) {
       if (!existing) {
@@ -238,6 +282,12 @@ function LoginScreen({
     onEnter(member, updated);
   };
 
+  const enterLocalDemo = () => {
+    const existing = data.members.find((member) => member.email.toLowerCase() === email.trim().toLowerCase());
+    if (!existing) return setError("Ese correo no existe todavía en el respaldo local.");
+    onEnter(existing);
+  };
+
   return (
     <main className="login-shell">
       <div className="login-atmosphere" aria-hidden="true">
@@ -282,6 +332,21 @@ function LoginScreen({
               <h2>{registering ? "Crea tu credencial" : "Bienvenido a casa"}</h2>
             </div>
           </div>
+
+          {firebaseConfigured && googleAvailable && (
+            <div className="firebase-login">
+              <button
+                className="button button-google button-wide"
+                type="button"
+                onClick={onGoogleSignIn}
+                disabled={firebaseBusy}
+              >
+                <span className="google-mark">G</span>
+                {firebaseBusy ? "Conectando con Google…" : "Continuar con Google"}
+              </button>
+              <span className="login-divider">o usa el acceso local de demostración</span>
+            </div>
+          )}
 
           <form onSubmit={submit} className="form-stack">
             {registering && (
@@ -344,11 +409,35 @@ function LoginScreen({
               Correo electrónico
               <input value={email} onChange={(event) => setEmail(event.target.value)} type="email" autoComplete="email" />
             </label>
-            {error && <p className="form-error">{error}</p>}
+            {firebaseConfigured && (
+              <label>
+                Contraseña
+                <input
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  type="password"
+                  autoComplete={registering ? "new-password" : "current-password"}
+                  placeholder="Mínimo 6 caracteres"
+                />
+              </label>
+            )}
+            {(error || firebaseError) && <p className="form-error">{error || firebaseError}</p>}
             <button className="button button-primary button-wide" type="submit">
-              {registering ? "Crear mi membresía" : "Entrar a la comunidad"} <ChevronRight size={17} />
+              {registering
+                ? firebaseConfigured
+                  ? "Crear mi cuenta segura"
+                  : "Crear mi membresía"
+                : firebaseConfigured
+                  ? "Entrar de forma segura"
+                  : "Entrar a la comunidad"} <ChevronRight size={17} />
             </button>
           </form>
+
+          {firebaseConfigured && !registering && (
+            <button type="button" className="text-button" onClick={enterLocalDemo}>
+              Entrar al modo demo local
+            </button>
+          )}
 
           <button
             type="button"
@@ -360,7 +449,11 @@ function LoginScreen({
           >
             {registering ? "Ya tengo credencial" : "Soy nuevo · quiero registrarme"}
           </button>
-          <p className="prototype-note">Prototipo privado · acceso local sin contraseña</p>
+          <p className="prototype-note">
+            {firebaseConfigured
+              ? "Acceso seguro con Google · modo local disponible para pruebas"
+              : "Prototipo privado · acceso local sin contraseña"}
+          </p>
         </div>
       </section>
     </main>
@@ -371,10 +464,15 @@ export default function HorseshoeApp() {
   const [ready, setReady] = useState(false);
   const [data, setData] = useState<AppData>(CLEAN_DATA);
   const [session, setSession] = useState<SessionUser | null>(null);
+  const [firebaseUser, setFirebaseUser] = useState<FirebaseUserProfile | null>(null);
+  const [firebaseBusy, setFirebaseBusy] = useState(false);
+  const [firebaseError, setFirebaseError] = useState("");
   const [activeTab, setActiveTab] = useState<TabId>("home");
   const [mobileMenu, setMobileMenu] = useState(false);
   const [simulatedRole, setSimulatedRole] = useState<Role>("primary_owner");
   const [toast, setToast] = useState<Toast>(null);
+  const applyingRemoteData = useRef(false);
+  const lastSyncedData = useRef<AppData | null>(null);
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -390,6 +488,97 @@ export default function HorseshoeApp() {
   useEffect(() => {
     if (ready) LocalStore.save(data);
   }, [data, ready]);
+
+  useEffect(() => {
+    if (!ready || !firebaseConfigured) return;
+    let cancelled = false;
+    let stopAuth: (() => void) | undefined;
+    let stopData: (() => void) | undefined;
+
+    const handleAuth = async (user: FirebaseUserProfile | null) => {
+      if (cancelled) return;
+      if (!user) {
+        setFirebaseUser(null);
+        return;
+      }
+
+      setFirebaseBusy(true);
+      setFirebaseError("");
+      try {
+        const member = await ensureFirebaseMember(user);
+        if (cancelled) return;
+        setFirebaseUser(user);
+        setData((previous) => ({
+          ...previous,
+          members: previous.members.some((item) => item.uid === member.uid)
+            ? previous.members.map((item) => (item.uid === member.uid ? member : item))
+            : [member, ...previous.members.filter((item) => item.email !== member.email)],
+        }));
+        const nextSession = { uid: member.uid, email: member.email, role: member.role };
+        LocalStore.setSession(nextSession);
+        setSession(nextSession);
+        setSimulatedRole(member.role);
+        setActiveTab("home");
+
+        stopData?.();
+        stopData = await subscribeToFirebaseData(
+          (remoteData) => {
+            applyingRemoteData.current = true;
+            lastSyncedData.current = remoteData;
+            setData(remoteData);
+          },
+          (error) => setFirebaseError(`Firebase: ${error.message}`),
+        );
+      } catch (error) {
+        setFirebaseError(
+          error instanceof Error
+            ? `Firebase: ${error.message}`
+            : "No fue posible conectar con Firebase.",
+        );
+      } finally {
+        setFirebaseBusy(false);
+      }
+    };
+
+    watchFirebaseAuth(handleAuth, (error) => setFirebaseError(`Firebase: ${error.message}`))
+      .then((unsubscribe) => {
+        if (cancelled) unsubscribe();
+        else stopAuth = unsubscribe;
+      })
+      .catch((error) =>
+        setFirebaseError(error instanceof Error ? `Firebase: ${error.message}` : "Firebase no está disponible."),
+      );
+
+    return () => {
+      cancelled = true;
+      stopAuth?.();
+      stopData?.();
+    };
+  }, [ready]);
+
+  useEffect(() => {
+    if (!ready || !firebaseUser) return;
+    if (applyingRemoteData.current) {
+      applyingRemoteData.current = false;
+      return;
+    }
+    const previous = lastSyncedData.current;
+    if (!previous) {
+      lastSyncedData.current = data;
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      persistFirebaseDiff(previous, data)
+        .then(() => {
+          lastSyncedData.current = data;
+        })
+        .catch((error) =>
+          setFirebaseError(error instanceof Error ? `Firebase: ${error.message}` : "Error al sincronizar."),
+        );
+    }, 450);
+    return () => window.clearTimeout(timeout);
+  }, [data, firebaseUser, ready]);
 
   useEffect(() => {
     if (!toast) return;
@@ -409,6 +598,37 @@ export default function HorseshoeApp() {
     setSession(nextSession);
     setSimulatedRole(member.role);
     setActiveTab("home");
+  };
+
+  const enterWithGoogle = async () => {
+    setFirebaseBusy(true);
+    setFirebaseError("");
+    try {
+      await signInWithGoogle();
+    } catch (error) {
+      setFirebaseError(
+        error instanceof Error ? `Firebase: ${error.message}` : "No fue posible abrir el acceso con Google.",
+      );
+      setFirebaseBusy(false);
+    }
+  };
+
+  const enterWithFirebaseCredentials = async (
+    email: string,
+    password: string,
+    profile?: FirebaseRegistrationProfile,
+  ) => {
+    setFirebaseBusy(true);
+    setFirebaseError("");
+    try {
+      if (profile) await registerWithEmail(email, password, profile);
+      else await signInWithEmail(email, password);
+    } catch (error) {
+      setFirebaseError(
+        error instanceof Error ? `Firebase: ${error.message}` : "No fue posible validar las credenciales.",
+      );
+      setFirebaseBusy(false);
+    }
   };
 
   const notify = (message: string, tone: ToastTone = "success") => setToast({ message, tone });
@@ -433,6 +653,13 @@ export default function HorseshoeApp() {
   };
 
   const logout = () => {
+    if (firebaseUser) {
+      void signOutFirebase().catch((error) =>
+        setFirebaseError(error instanceof Error ? `Firebase: ${error.message}` : "No fue posible cerrar Firebase."),
+      );
+      setFirebaseUser(null);
+      lastSyncedData.current = null;
+    }
     LocalStore.setSession(null);
     setSession(null);
     setActiveTab("home");
@@ -440,7 +667,23 @@ export default function HorseshoeApp() {
   };
 
   if (!ready) return <div className="app-loading">Preparando la casa de la familia Colt…</div>;
-  if (!session || !currentUser) return <LoginScreen data={data} onEnter={enter} />;
+  const googleAvailable =
+    typeof window !== "undefined" &&
+    (window.location.hostname === "localhost" ||
+      window.location.hostname.endsWith(".firebaseapp.com") ||
+      window.location.hostname.endsWith(".web.app"));
+  if (!session || !currentUser)
+    return (
+      <LoginScreen
+        data={data}
+        onEnter={enter}
+        onGoogleSignIn={enterWithGoogle}
+        onFirebaseCredentials={enterWithFirebaseCredentials}
+        googleAvailable={googleAvailable}
+        firebaseBusy={firebaseBusy}
+        firebaseError={firebaseError}
+      />
+    );
 
   const availableNav = NAV_ITEMS.filter((item) => item.id !== "admin" || isAdmin);
 
@@ -589,6 +832,7 @@ export default function HorseshoeApp() {
                   setData={setData}
                   currentUser={currentUser}
                   isOwnerIdentity={isOwnerIdentity}
+                  firebaseLive={Boolean(firebaseUser)}
                   notify={notify}
                 />
               )}
@@ -1654,12 +1898,14 @@ function AdminModule({
   setData,
   currentUser,
   isOwnerIdentity,
+  firebaseLive,
   notify,
 }: {
   data: AppData;
   setData: React.Dispatch<React.SetStateAction<AppData>>;
   currentUser: Member;
   isOwnerIdentity: boolean;
+  firebaseLive: boolean;
   notify: (message: string, tone?: ToastTone) => void;
 }) {
   const [confirmReset, setConfirmReset] = useState(false);
@@ -1681,7 +1927,16 @@ function AdminModule({
     if (!file) return;
     try {
       const restored = LocalStore.restore(await file.text());
-      setData(restored);
+      setData(
+        firebaseLive
+          ? {
+              ...restored,
+              members: restored.members.map((member) =>
+                member.email === OWNER_EMAIL ? { ...member, uid: currentUser.uid } : member,
+              ),
+            }
+          : restored,
+      );
       notify("Respaldo restaurado correctamente.");
     } catch (error) {
       notify(error instanceof Error ? error.message : "No fue posible restaurar el respaldo.", "danger");
@@ -1753,14 +2008,16 @@ function AdminModule({
           <Database size={20} />
         </span>
         <div>
-          <strong>{firebaseConfigured ? "Firebase configurado" : "Modo local protegido"}</strong>
+          <strong>{firebaseLive ? "Firebase sincronizado" : firebaseConfigured ? "Firebase configurado" : "Modo local protegido"}</strong>
           <small>
-            {firebaseConfigured
-              ? "La configuración está disponible para activar la sincronización en la siguiente migración."
+            {firebaseLive
+              ? "La sesión usa Google Sign-In y los cambios se sincronizan con Cloud Firestore en tiempo real."
+              : firebaseConfigured
+              ? "Google Sign-In está disponible; inicia sesión con Google para activar la sincronización."
               : "La PWA funciona sin conexión; las reglas y variables de Firebase ya están preparadas para conectarse."}
           </small>
         </div>
-        <b>{firebaseConfigured ? "LISTO" : "PENDIENTE DE CONEXIÓN"}</b>
+        <b>{firebaseLive ? "EN LÍNEA" : firebaseConfigured ? "LISTO" : "PENDIENTE DE CONEXIÓN"}</b>
       </section>
 
       <div className="admin-layout">
@@ -1861,8 +2118,14 @@ function AdminModule({
               <button
                 className="button button-danger"
                 onClick={() => {
+                  const cleanData = firebaseLive
+                    ? {
+                        ...CLEAN_DATA,
+                        members: CLEAN_DATA.members.map((member) => ({ ...member, uid: currentUser.uid })),
+                      }
+                    : CLEAN_DATA;
                   LocalStore.wipe();
-                  setData(CLEAN_DATA);
+                  setData(cleanData);
                   setConfirmReset(false);
                   notify("Estado limpio restaurado.", "info");
                 }}
