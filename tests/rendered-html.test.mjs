@@ -48,4 +48,7 @@ test("ships offline support and guarded Firebase rules", async () => {
 
   assert.match(rules, /lic\.gmrg@gmail\.com/);
   assert.match(rules, /allow update, delete: if false/);
+  assert.match(rules, /request\.resource\.data\.role == resource\.data\.role/);
+  assert.match(rules, /resource\.data\.memberId == request\.auth\.uid/);
+  assert.match(rules, /resource\.data\.email != 'lic\.gmrg@gmail\.com'/);
 });
