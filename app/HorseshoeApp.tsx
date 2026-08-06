@@ -344,7 +344,7 @@ function LoginScreen({
                 <span className="google-mark">G</span>
                 {firebaseBusy ? "Conectando con Google…" : "Continuar con Google"}
               </button>
-              <span className="login-divider">o usa el acceso local de demostración</span>
+              <span className="login-divider">o usa tu correo y contraseña</span>
             </div>
           )}
 
@@ -451,7 +451,9 @@ function LoginScreen({
           </button>
           <p className="prototype-note">
             {firebaseConfigured
-              ? "Acceso seguro con Google · modo local disponible para pruebas"
+              ? googleAvailable
+                ? "Acceso seguro con Google o correo · modo local disponible para pruebas"
+                : "Acceso seguro con correo y contraseña · modo local disponible para pruebas"
               : "Prototipo privado · acceso local sin contraseña"}
           </p>
         </div>
@@ -522,6 +524,7 @@ export default function HorseshoeApp() {
 
         stopData?.();
         stopData = await subscribeToFirebaseData(
+          member,
           (remoteData) => {
             applyingRemoteData.current = true;
             lastSyncedData.current = remoteData;
@@ -2013,8 +2016,8 @@ function AdminModule({
             {firebaseLive
               ? "La sesión usa Google Sign-In y los cambios se sincronizan con Cloud Firestore en tiempo real."
               : firebaseConfigured
-              ? "Google Sign-In está disponible; inicia sesión con Google para activar la sincronización."
-              : "La PWA funciona sin conexión; las reglas y variables de Firebase ya están preparadas para conectarse."}
+                ? "Inicia sesión con correo y contraseña para activar la sincronización con Cloud Firestore."
+                : "La PWA funciona sin conexión; las reglas y variables de Firebase ya están preparadas para conectarse."}
           </small>
         </div>
         <b>{firebaseLive ? "EN LÍNEA" : firebaseConfigured ? "LISTO" : "PENDIENTE DE CONEXIÓN"}</b>

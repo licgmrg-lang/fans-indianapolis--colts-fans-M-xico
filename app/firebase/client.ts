@@ -1,6 +1,6 @@
 import { firebaseConfig, firebaseConfigured } from "./config";
 import { OWNER, OWNER_EMAIL } from "../store";
-import type { AppData, Member } from "../types";
+import type { AppData, FeedPost, Member } from "../types";
 
 const FIREBASE_CDN_VERSION = "12.9.0";
 const FIREBASE_CDN = `https://www.gstatic.com/firebasejs/${FIREBASE_CDN_VERSION}`;
@@ -173,20 +173,23 @@ export async function ensureFirebaseMember(
 }
 
 export async function subscribeToFirebaseData(
+  member: Pick<Member, "uid" | "role">,
   onData: (data: AppData) => void,
   onError: (error: Error) => void,
 ) {
   const { db, firestoreSdk } = await runtime();
   const values = {} as AppData;
   const initialized = new Set<CollectionKey>();
+  const isAdmin = member.role === "admin" || member.role === "primary_owner";
 
   const publish = () => {
     if (initialized.size === COLLECTIONS.length) onData({ ...values });
   };
 
-  const unsubscribers = COLLECTIONS.map(({ key, path }) =>
-    firestoreSdk.onSnapshot(
-      firestoreSdk.collection(db, path),
+  const unsubscribers: (() => void)[] = [];
+  const listen = (key: CollectionKey, source: unknown) => {
+    const unsubscribe = firestoreSdk.onSnapshot(
+      source,
       (snapshot: unknown) => {
         const docs = (snapshot as { docs: { data: () => unknown }[] }).docs.map((item) => item.data());
         (values as unknown as Record<string, unknown[]>)[key] = docs;
@@ -194,8 +197,52 @@ export async function subscribeToFirebaseData(
         publish();
       },
       (error: unknown) => onError(error instanceof Error ? error : new Error("Error de sincronización.")),
-    ) as () => void,
-  );
+    ) as () => void;
+    unsubscribers.push(unsubscribe);
+  };
+
+  for (const { key, path } of COLLECTIONS) {
+    if (key === "feedPosts" || key === "auditLogs") continue;
+    listen(key, firestoreSdk.collection(db, path));
+  }
+
+  if (isAdmin) {
+    listen("feedPosts", firestoreSdk.collection(db, "feedPosts"));
+    listen("auditLogs", firestoreSdk.collection(db, "auditLogs"));
+  } else {
+    values.auditLogs = [];
+    initialized.add("auditLogs");
+
+    const feedCollection = firestoreSdk.collection(db, "feedPosts");
+    const feedBuckets = new Map<string, FeedPost[]>();
+    const feedQueries = [
+      ["approved", firestoreSdk.query(feedCollection, firestoreSdk.where("status", "==", "approved"))],
+      ["mine", firestoreSdk.query(feedCollection, firestoreSdk.where("authorId", "==", member.uid))],
+    ] as const;
+
+    for (const [bucket, query] of feedQueries) {
+      const unsubscribe = firestoreSdk.onSnapshot(
+        query,
+        (snapshot: unknown) => {
+          const posts = (snapshot as { docs: { data: () => FeedPost }[] }).docs.map((item) => item.data());
+          feedBuckets.set(bucket, posts);
+          if (feedBuckets.size < feedQueries.length) return;
+
+          const merged = new Map<string, FeedPost>();
+          feedBuckets.forEach((items) => items.forEach((post) => merged.set(post.id, post)));
+          values.feedPosts = [...merged.values()].sort((left, right) =>
+            right.createdAt.localeCompare(left.createdAt),
+          );
+          initialized.add("feedPosts");
+          publish();
+        },
+        (error: unknown) => onError(error instanceof Error ? error : new Error("Error de sincronización.")),
+      ) as () => void;
+      unsubscribers.push(unsubscribe);
+    }
+  }
+
+  publish();
 
   return () => unsubscribers.forEach((unsubscribe) => unsubscribe());
 }

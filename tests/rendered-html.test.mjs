@@ -38,8 +38,10 @@ test("renders Project Horseshoe with production metadata", async () => {
 
 test("ships offline support and guarded Firebase rules", async () => {
   const root = new URL("../", import.meta.url);
-  const [rules] = await Promise.all([
+  const [rules, firebaseClient, app] = await Promise.all([
     readFile(new URL("firestore.rules", root), "utf8"),
+    readFile(new URL("app/firebase/client.ts", root), "utf8"),
+    readFile(new URL("app/HorseshoeApp.tsx", root), "utf8"),
     access(new URL("public/sw.js", root)),
     access(new URL("storage.rules", root)),
     access(new URL("firestore.indexes.json", root)),
@@ -51,4 +53,11 @@ test("ships offline support and guarded Firebase rules", async () => {
   assert.match(rules, /request\.resource\.data\.role == resource\.data\.role/);
   assert.match(rules, /resource\.data\.memberId == request\.auth\.uid/);
   assert.match(rules, /resource\.data\.email != 'lic\.gmrg@gmail\.com'/);
+  assert.match(rules, /request\.resource\.data\.role in \['member', 'admin'\]/);
+  assert.match(firebaseClient, /where\("status", "==", "approved"\)/);
+  assert.match(firebaseClient, /where\("authorId", "==", member\.uid\)/);
+  assert.match(firebaseClient, /values\.auditLogs = \[\]/);
+  assert.match(app, /subscribeToFirebaseData\(\s*member,/);
+  assert.match(app, /Acceso seguro con correo y contraseña/);
+  assert.match(app, /Inicia sesión con correo y contraseña para activar la sincronización/);
 });
