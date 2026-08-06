@@ -32,6 +32,7 @@ test("renders Project Horseshoe with production metadata", async () => {
   assert.match(html, /Project Horseshoe/);
   assert.match(html, /Colts Fans México/);
   assert.match(html, /og\.png/);
+  assert.match(html, /favicon\.svg/);
   assert.match(html, /manifest\.webmanifest/);
   assert.doesNotMatch(html, /codex-preview|Your site is taking shape|react-loading-skeleton/i);
 });

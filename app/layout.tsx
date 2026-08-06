@@ -16,6 +16,9 @@ export async function generateMetadata(): Promise<Metadata> {
       "La casa digital de Colts Fans México: credencial, eventos, quiniela, memorias y comunidad.",
     applicationName: "Project Horseshoe",
     manifest: "/manifest.webmanifest",
+    icons: {
+      icon: [{ url: "/favicon.svg", type: "image/svg+xml" }],
+    },
     themeColor: "#002c5f",
     openGraph: {
       title: "Project Horseshoe · Colts Fans México",
