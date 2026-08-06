@@ -1,0 +1,127 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner() {
+      return signedIn() && request.auth.token.email == 'lic.gmrg@gmail.com';
+    }
+
+    function hasMemberRecord() {
+      return signedIn() && exists(/databases/$(database)/documents/members/$(request.auth.uid));
+    }
+
+    function isAdmin() {
+      return isOwner() || (
+        hasMemberRecord() &&
+        get(/databases/$(database)/documents/members/$(request.auth.uid)).data.role in ['admin', 'primary_owner']
+      );
+    }
+
+    match /members/{uid} {
+      allow read: if signedIn();
+      allow create: if (
+        isOwner()
+        && request.auth.uid == uid
+        && request.resource.data.uid == uid
+        && request.resource.data.email == 'lic.gmrg@gmail.com'
+        && request.resource.data.role == 'primary_owner'
+      ) || (
+        signedIn()
+        && request.auth.uid == uid
+        && request.resource.data.uid == uid
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.role == 'member'
+      );
+      allow update: if (
+        isOwner()
+        && request.resource.data.email == resource.data.email
+        && (
+          (
+            resource.data.email == 'lic.gmrg@gmail.com'
+            && request.resource.data.role == 'primary_owner'
+          ) || (
+            resource.data.email != 'lic.gmrg@gmail.com'
+            && request.resource.data.role in ['member', 'admin']
+          )
+        )
+      ) || (
+        isAdmin()
+        && resource.data.email != 'lic.gmrg@gmail.com'
+        && request.resource.data.email == resource.data.email
+        && request.resource.data.role == resource.data.role
+      ) || (
+        signedIn()
+        && request.auth.uid == uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'fullName', 'avatarUrl', 'favoritePlayer', 'cityId', 'state',
+          'fanSinceYear', 'firstRememberedGame', 'pronoun', 'nickname'
+        ])
+      );
+      allow delete: if isOwner() && resource.data.email != 'lic.gmrg@gmail.com';
+    }
+
+    match /events/{eventId} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+
+    match /attendances/{attendanceId} {
+      allow read: if signedIn();
+      allow create: if isAdmin();
+      allow update, delete: if isOwner();
+    }
+
+    match /raffles/{raffleId} {
+      allow read: if signedIn();
+      allow create: if isAdmin();
+      allow update, delete: if false;
+    }
+
+    match /feedPosts/{postId} {
+      allow read: if signedIn() && (
+        resource.data.status == 'approved'
+        || resource.data.authorId == request.auth.uid
+        || isAdmin()
+      );
+      allow create: if signedIn()
+        && request.resource.data.authorId == request.auth.uid
+        && request.resource.data.status == 'pending';
+      allow update: if isAdmin() || (
+        signedIn()
+        && resource.data.status == 'approved'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactions'])
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /predictions/{predictionId} {
+      allow read: if signedIn();
+      allow create: if signedIn() && request.resource.data.memberId == request.auth.uid;
+      allow update: if signedIn()
+        && resource.data.memberId == request.auth.uid
+        && request.resource.data.memberId == request.auth.uid;
+      allow delete: if signedIn() && resource.data.memberId == request.auth.uid;
+    }
+
+    match /guestBook/{messageId} {
+      allow read: if signedIn();
+      allow create: if signedIn() && request.resource.data.authorId == request.auth.uid;
+      allow update: if false;
+      allow delete: if isAdmin();
+    }
+
+    match /travels/{travelId} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+
+    match /auditLogs/{logId} {
+      allow read, create: if isAdmin();
+      allow update, delete: if false;
+    }
+  }
+}

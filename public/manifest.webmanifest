@@ -1,0 +1,14 @@
+{
+  "name": "Project Horseshoe · Colts Fans México",
+  "short_name": "Horseshoe",
+  "description": "La casa digital de Colts Fans México.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone"],
+  "background_color": "#f5f7fa",
+  "theme_color": "#002c5f",
+  "lang": "es-MX",
+  "categories": ["sports", "social", "lifestyle"]
+}
